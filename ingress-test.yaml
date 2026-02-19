@@ -1,0 +1,213 @@
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  annotations: {}
+  name: header-routing-test
+spec:
+  entryPoints:
+  - web
+  routes:
+  - kind: Rule
+    match: Host(`api.hellman.oxygen.dfds.cloud`) && PathPrefix(`/whoami-noheader`)
+    middlewares:
+    - name: whoami-stripprefix
+    services:
+    - kind: Service
+      name: whoami
+      passHostHeader: true
+      port: external
+  - kind: Rule
+    match: Host(`api.hellman.oxygen.dfds.cloud`) && PathPrefix(`/whoami-simpleheader`) && Headers(`X-Tenant`, `simpleheader`)
+    middlewares:
+    - name: whoami-stripprefix
+    services:
+    - kind: Service
+      name: whoami
+      passHostHeader: true
+      port: external
+  - kind: Rule
+    match: Host(`api.hellman.oxygen.dfds.cloud`) && PathPrefix(`/whoami-regexheader`) && HeadersRegexp(`X-Tenant`, `.*`)
+    middlewares:
+    - name: whoami-stripprefix
+    services:
+    - kind: Service
+      name: whoami
+      passHostHeader: true
+      port: external
+
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: whoami-stripprefix
+spec:
+  stripPrefix:
+    prefixes:
+      - /whoami-noheader
+      - /whoami-simpleheader
+      - /whoami-regexheader
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: whoami
+  labels:
+    app: whoami
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: whoami
+  template:
+    metadata:
+      labels:
+        app: whoami
+    spec:
+      containers:
+      - name: whoami
+        image: traefik/whoami:v1.10.0
+        ports:
+        - containerPort: 8080
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 100m
+            memory: 128Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: whoami
+  labels:
+    app: whoami
+spec:
+  selector:
+    app: whoami
+  ports:
+  - name: external
+    port: 8080
+    targetPort: 8080
+    protocol: TCP
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: curl-noheader
+  labels:
+    application: sureflap-api
+    environment: production
+    owner: TeamTrack
+spec:
+  schedule: "*/1 * * * *"
+  timeZone: "Europe/Copenhagen"
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 1
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        metadata:
+          labels:
+            application: curl-noheader
+        spec:
+          restartPolicy: Never
+          containers:
+          - name: curl-noheader
+            image: curlimages/curl:8.5.0
+            command:
+            - /bin/sh
+            - -c
+            - |
+              curl --location --request POST 'https://api.hellman.oxygen.dfds.cloud/whoami-noheader' -H 'X-Tenant: simpleheader' \
+                --fail --show-error --max-time 30
+            resources:
+              requests:
+                memory: "32Mi"
+                cpu: "10m"
+              limits:
+                memory: "64Mi"
+                cpu: "50m"
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: curl-simpleheader
+  labels:
+    application: sureflap-api
+    environment: production
+    owner: TeamTrack
+spec:
+  schedule: "*/1 * * * *"
+  timeZone: "Europe/Copenhagen"
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 1
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        metadata:
+          labels:
+            application: curl-simpleheader
+        spec:
+          restartPolicy: Never
+          containers:
+          - name: curl-simpleheader
+            image: curlimages/curl:8.5.0
+            command:
+            - /bin/sh
+            - -c
+            - |
+              curl --location --request POST 'https://api.hellman.oxygen.dfds.cloud/whoami-simpleheader' -H 'X-Tenant: simpleheader' \
+                --fail --show-error --max-time 30
+            resources:
+              requests:
+                memory: "32Mi"
+                cpu: "10m"
+              limits:
+                memory: "64Mi"
+                cpu: "50m"
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: curl-regexheader
+  labels:
+    application: sureflap-api
+    environment: production
+    owner: TeamTrack
+spec:
+  schedule: "*/1 * * * *"
+  timeZone: "Europe/Copenhagen"
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 1
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        metadata:
+          labels:
+            application: curl-regexheader
+        spec:
+          restartPolicy: Never
+          containers:
+          - name: curl-regexheader
+            image: curlimages/curl:8.5.0
+            command:
+            - /bin/sh
+            - -c
+            - |
+              curl --location --request POST 'https://api.hellman.oxygen.dfds.cloud/whoami-regexheader' -H 'X-Tenant: simpleheader' \
+                --fail --show-error --max-time 30
+            resources:
+              requests:
+                memory: "32Mi"
+                cpu: "10m"
+              limits:
+                memory: "64Mi"
+                cpu: "50m"
+
